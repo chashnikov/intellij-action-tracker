@@ -1,0 +1,26 @@
+<idea-plugin version="2">
+  <id>org.jetbrains.action-tracker</id>
+  <name>Action Tracker</name>
+  <version>0.1</version>
+  <vendor url="http://www.jetbrains.com">JetBrains</vendor>
+
+  <description><![CDATA[
+      Allows to record actions performed by user in IntelliJ IDEs. Use Tools | 'Start Tracking' action to start recording,
+      and Tools | 'Stop Tracking...' to show the recorded data.
+    ]]></description>
+
+  <idea-version since-build="135.0"/>
+
+  <depends>com.intellij.modules.lang</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <projectService serviceImplementation="org.jetbrains.actionTracker.ActionTrackingService"/>
+  </extensions>
+
+  <actions>
+    <action class="org.jetbrains.actionTracker.StartStopTrackingAction" id="action.tracker.StartStopTracking" text="Start/Stop Tracking">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+  </actions>
+
+</idea-plugin>

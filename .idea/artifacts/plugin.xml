@@ -1,0 +1,17 @@
+<component name="ArtifactManager">
+  <artifact name="plugin">
+    <output-path>$PROJECT_DIR$/out/artifacts/</output-path>
+    <root id="root">
+      <element id="archive" name="plugin.zip">
+        <element id="directory" name="action-tracker">
+          <element id="directory" name="lib">
+            <element id="archive" name="action-tracker.jar">
+              <element id="module-output" name="plugin" />
+            </element>
+            <element id="library" level="project" name="KotlinJavaRuntime" />
+          </element>
+        </element>
+      </element>
+    </root>
+  </artifact>
+</component>

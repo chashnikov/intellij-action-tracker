@@ -1,2 +1,1 @@
-intellij-actions-recorder
-=========================
+Plugin for IntelliJ IDEA to record user actions

@@ -20,7 +20,7 @@ class CharTyped(val char: Char): ActionData {}
 
 class ActionInvoked(val actionText: String, val source: ActionData?): ActionData
 
-class NavigationActionInvoked(val selection: String, val source: ActionData): ActionData
+class ContextSensitiveActionInvoked(val selection: String, val source: ActionData): ActionData
 
 private fun getWindow(c: Component) = if (c is Window) c else SwingUtilities.getWindowAncestor(c)
 
@@ -46,7 +46,7 @@ public fun ActionData.toPresentableText(): String = when (this) {
         }
         "action '$actionText'$via"
     }
-    is NavigationActionInvoked -> "${source.toPresentableText()} on '$selection'"
+    is ContextSensitiveActionInvoked -> "${source.toPresentableText()} on '$selection'"
     is NextTask -> ">>> Next Task <<<"
     else -> "unknown"
 }

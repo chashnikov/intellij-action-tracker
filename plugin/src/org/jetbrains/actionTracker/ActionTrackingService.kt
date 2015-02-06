@@ -80,8 +80,8 @@ public class ActionTrackingService(private val project: Project) {
 }
 
 private val actionTextByClass = mapOf("com.intellij.openapi.ui.impl.DialogWrapperPeerImpl\$AnCancelAction" to "Cancel")
-private val navigationActions = setOf(
-        "EditorEnter",
+private val contextSensitiveActions = setOf(
+        "EditorEnter", "EditorDelete", "EditorBackSpace",
         "EditorLeft", "EditorRight", "EditorDown", "EditorUp",
         "EditorLineStart", "EditorLineEnd", "EditorPageUp", "EditorPageDown",
         "EditorPreviousWord", "EditorNextWord",
@@ -91,10 +91,10 @@ private val navigationActions = setOf(
         "EditorRightWithSelection", "EditorLeftWithSelection",
         "EditorLineStartWithSelection", "EditorLineEndWithSelection",
         "EditorPageDownWithSelection", "EditorPageUpWithSelection")
-private val navigationEvents = setOf(KeyEvent.VK_UP, KeyEvent.VK_DOWN, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
-        KeyEvent.VK_HOME, KeyEvent.VK_END, KeyEvent.VK_PAGE_DOWN, KeyEvent.VK_PAGE_UP, KeyEvent.VK_ENTER)
+private val contextSensitiveEvents = setOf(KeyEvent.VK_UP, KeyEvent.VK_DOWN, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
+        KeyEvent.VK_HOME, KeyEvent.VK_END, KeyEvent.VK_PAGE_DOWN, KeyEvent.VK_PAGE_UP, KeyEvent.VK_ENTER, KeyEvent.VK_DELETE, KeyEvent.VK_BACK_SPACE)
 
-private fun isNavigationAction(e: KeyEvent) = e.getKeyCode() in navigationEvents
+private fun isContextSensitiveAction(e: KeyEvent) = e.getKeyCode() in contextSensitiveEvents
 
 private fun getSelectedItem(component: Component, project: Project): String? {
     val context = DataManager.getInstance().getDataContext(component)
@@ -186,12 +186,12 @@ class ActionTracker(private val project: Project): Disposable {
                 val text = StringUtil.nullize(event.getPresentation().getText(), true)
                         ?: actionId ?: getLocalActionText(action) ?: actionTextByClass[actionClassName] ?: actionClassName
                 val actionInvoked = ActionInvoked(text, source)
-                if (actionId in navigationActions) {
+                if (actionId in contextSensitiveActions) {
                     val component = input?.getComponent()
                     if (component != null) {
                         val selection = getSelectedItem(component, project)
                         if (selection != null) {
-                            addRecord(NavigationActionInvoked(selection, actionInvoked))
+                            addRecord(ContextSensitiveActionInvoked(selection, actionInvoked))
                             return
                         }
                     }
@@ -243,10 +243,10 @@ class ActionTracker(private val project: Project): Disposable {
         }
         else {
             val action = KeyStrokePressed(KeyStroke.getKeyStrokeForEvent(e))
-            if (isNavigationAction(e)) {
+            if (isContextSensitiveAction(e)) {
                 val selection = getSelectedItem(e.getComponent(), project)
                 if (selection != null) {
-                    addRecord(NavigationActionInvoked(selection, action))
+                    addRecord(ContextSensitiveActionInvoked(selection, action))
                     return
                 }
             }

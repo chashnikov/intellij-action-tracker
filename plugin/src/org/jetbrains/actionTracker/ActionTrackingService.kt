@@ -144,9 +144,13 @@ class ActionTracker(private val project: Project): Disposable {
     override fun dispose() {
     }
 
+    public fun startNextTask() {
+        addRecord(NextTask())
+    }
+
     private fun addRecord(actionData: ActionData) {
         actionRecords.add(ActionRecord(System.currentTimeMillis(), actionData))
-//        println(actionData.toPresentableText())
+        println(actionData.toPresentableText())
     }
 
     fun start() {
@@ -160,6 +164,8 @@ class ActionTracker(private val project: Project): Disposable {
                     else -> null
                 }
                 val actionId = ActionManager.getInstance().getId(action)
+                if (actionId?.startsWith("action.tracker.") ?: false) return
+
                 val actionClassName = action.javaClass.getName()
                 val text = StringUtil.nullize(event.getPresentation().getText(), true)
                         ?: actionId ?: getLocalActionText(action) ?: actionTextByClass[actionClassName] ?: actionClassName

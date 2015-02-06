@@ -32,6 +32,8 @@ class KeyStrokePressed(val keyStroke: KeyStroke): ActionData {
     fun getKeystrokeText(): String = KeymapUtil.getKeystrokeText(keyStroke)
 }
 
+class NextTask: ActionData {}
+
 public fun ActionData.toPresentableText(): String = when (this) {
     is CharTyped -> "typed '$char'"
     is MouseClicked -> "mouse clicked${if (dialogTitle != null) " (in '$dialogTitle' dialog)" else ""}"
@@ -45,5 +47,6 @@ public fun ActionData.toPresentableText(): String = when (this) {
         "action '$actionText'$via"
     }
     is NavigationActionInvoked -> "${source.toPresentableText()} on '$selection'"
+    is NextTask -> ">>> Next Task <<<"
     else -> "unknown"
 }

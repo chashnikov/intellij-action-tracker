@@ -3,7 +3,6 @@ package org.jetbrains.actionTracker
 import javax.swing.KeyStroke
 import com.intellij.openapi.keymap.KeymapUtil
 import java.awt.event.MouseEvent
-import com.intellij.openapi.actionSystem.AnAction
 import java.awt.Component
 import java.awt.Window
 import javax.swing.SwingUtilities
@@ -20,6 +19,8 @@ trait ActionData {
 class CharTyped(val char: Char): ActionData {}
 
 class ActionInvoked(val actionText: String, val source: ActionData?): ActionData
+
+class NavigationActionInvoked(val selection: String, val source: ActionData): ActionData
 
 private fun getWindow(c: Component) = if (c is Window) c else SwingUtilities.getWindowAncestor(c)
 
@@ -43,5 +44,6 @@ public fun ActionData.toPresentableText(): String = when (this) {
         }
         "action '$actionText'$via"
     }
+    is NavigationActionInvoked -> "${source.toPresentableText()} on '$selection'"
     else -> "unknown"
 }

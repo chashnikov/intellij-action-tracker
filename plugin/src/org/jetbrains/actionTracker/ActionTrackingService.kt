@@ -23,6 +23,14 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.ui.Messages
 import java.text.SimpleDateFormat
 import java.util.Date
+import javax.swing.JLabel
+import com.intellij.ui.SimpleColoredComponent
+import com.intellij.ide.DataManager
+import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.navigation.NavigationItem
+import javax.swing.text.JTextComponent
+import com.intellij.ide.util.gotoByName.ChooseByNamePopup
+import java.awt.Component
 
 /**
  * @author nik
@@ -52,6 +60,66 @@ public class ActionTrackingService(private val project: Project) {
 }
 
 private val actionTextByClass = mapOf("com.intellij.openapi.ui.impl.DialogWrapperPeerImpl\$AnCancelAction" to "Cancel")
+private val navigationActions = setOf(
+        "EditorEnter",
+        "EditorLeft", "EditorRight", "EditorDown", "EditorUp",
+        "EditorLineStart", "EditorLineEnd", "EditorPageUp", "EditorPageDown",
+        "EditorPreviousWord", "EditorNextWord",
+        "EditorScrollUp", "EditorScrollDown",
+        "EditorTextStart", "EditorTextEnd",
+        "EditorDownWithSelection", "EditorUpWithSelection",
+        "EditorRightWithSelection", "EditorLeftWithSelection",
+        "EditorLineStartWithSelection", "EditorLineEndWithSelection",
+        "EditorPageDownWithSelection", "EditorPageUpWithSelection")
+private val navigationEvents = setOf(KeyEvent.VK_UP, KeyEvent.VK_DOWN, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
+        KeyEvent.VK_HOME, KeyEvent.VK_END, KeyEvent.VK_PAGE_DOWN, KeyEvent.VK_PAGE_UP, KeyEvent.VK_ENTER)
+
+private fun isNavigationAction(e: KeyEvent) = e.getKeyCode() in navigationEvents
+
+private fun getSelectedItem(component: Component, project: Project): String? {
+    val context = DataManager.getInstance().getDataContext(component)
+    val navigatable = CommonDataKeys.NAVIGATABLE.getData(context)
+    if (navigatable is NavigationItem) {
+        return navigatable.getPresentation()?.getPresentableText()
+    }
+    val popup = project.getUserData(ChooseByNamePopup.CHOOSE_BY_NAME_POPUP_IN_PROJECT_KEY)
+    if (popup != null) {
+        val element = popup.getChosenElement()
+        val name = popup.getModel().getElementName(element)
+        if (name != null) {
+            return name
+        }
+    }
+
+    var current = component
+    while (true) {
+        val cur = current
+        when (cur) {
+            is JLabel -> return cur.getText()
+            is JTextComponent -> return cur.getText()
+            is SimpleColoredComponent -> return cur.getCharSequence(true).toString()
+        }
+        val next = current.getParent()
+        if (next == null) {
+            return null
+        }
+        current = next
+    }
+}
+
+fun getLocalActionText(action: AnAction): String? {
+    if (action.javaClass.getName().contains("$")) {
+        val shortcutSet = action.getShortcutSet()
+        if (shortcutSet != null) {
+            val shortcut = shortcutSet.getShortcuts().firstOrNull()
+            if (shortcut != null) {
+                return shortcut.toString()
+            }
+        }
+    }
+    return null
+}
+
 
 class ActionTracker(private val project: Project): Disposable {
     private val actionInputEvents = HashSet<InputEvent>()
@@ -79,8 +147,19 @@ class ActionTracker(private val project: Project): Disposable {
                 val actionId = ActionManager.getInstance().getId(action)
                 val actionClassName = action.javaClass.getName()
                 val text = StringUtil.nullize(event.getPresentation().getText(), true)
-                        ?: actionId ?: actionTextByClass[actionClassName] ?: actionClassName
-                addRecord(ActionInvoked(text, source))
+                        ?: actionId ?: getLocalActionText(action) ?: actionTextByClass[actionClassName] ?: actionClassName
+                val actionInvoked = ActionInvoked(text, source)
+                if (actionId in navigationActions) {
+                    val component = input?.getComponent()
+                    if (component != null) {
+                        val selection = getSelectedItem(component, project)
+                        if (selection != null) {
+                            addRecord(NavigationActionInvoked(selection, actionInvoked))
+                            return
+                        }
+                    }
+                }
+                addRecord(actionInvoked)
             }
         }, this)
         IdeEventQueue.getInstance().addPostprocessor(object : EventDispatcher {
@@ -126,7 +205,15 @@ class ActionTracker(private val project: Project): Disposable {
             addRecord(CharTyped(e.getKeyChar()))
         }
         else {
-            addRecord(KeyStrokePressed(KeyStroke.getKeyStrokeForEvent(e)))
+            val action = KeyStrokePressed(KeyStroke.getKeyStrokeForEvent(e))
+            if (isNavigationAction(e)) {
+                val selection = getSelectedItem(e.getComponent(), project)
+                if (selection != null) {
+                    addRecord(NavigationActionInvoked(selection, action))
+                    return
+                }
+            }
+            addRecord(action)
         }
     }
 

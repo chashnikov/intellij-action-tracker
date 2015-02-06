@@ -31,6 +31,10 @@ import com.intellij.navigation.NavigationItem
 import javax.swing.text.JTextComponent
 import com.intellij.ide.util.gotoByName.ChooseByNamePopup
 import java.awt.Component
+import javax.swing.JTree
+import javax.swing.JList
+import javax.swing.JTable
+import com.intellij.ui.treeStructure.treetable.TreeTable
 
 /**
  * @author nik
@@ -80,7 +84,9 @@ private fun getSelectedItem(component: Component, project: Project): String? {
     val context = DataManager.getInstance().getDataContext(component)
     val navigatable = CommonDataKeys.NAVIGATABLE.getData(context)
     if (navigatable is NavigationItem) {
-        return navigatable.getPresentation()?.getPresentableText()
+        val presentableText = navigatable.getPresentation()?.getPresentableText()
+        val locationString = navigatable.getPresentation()?.getLocationString()
+        return presentableText + if (locationString != null) " $locationString" else ""
     }
     val popup = project.getUserData(ChooseByNamePopup.CHOOSE_BY_NAME_POPUP_IN_PROJECT_KEY)
     if (popup != null) {
@@ -98,6 +104,15 @@ private fun getSelectedItem(component: Component, project: Project): String? {
             is JLabel -> return cur.getText()
             is JTextComponent -> return cur.getText()
             is SimpleColoredComponent -> return cur.getCharSequence(true).toString()
+            is JTree -> return cur.getSelectionPath()?.getLastPathComponent().toString()
+            is JList -> return cur.getSelectedValue().toString()
+            is TreeTable -> return cur.getTree().getSelectionPath()?.getLastPathComponent().toString()
+            is JTable -> {
+                val row = cur.getSelectedRow()
+                if (row < 0) return null
+                //todo report Kotlin bug
+                return (0..cur.getColumnCount()-1).map { (cur.getValueAt(row, it) as Any?).toString() }.joinToString(", ")
+            }
         }
         val next = current.getParent()
         if (next == null) {

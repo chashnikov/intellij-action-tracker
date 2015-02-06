@@ -20,7 +20,6 @@ import com.intellij.ide.IdeEventQueue.EventDispatcher
 import java.awt.AWTEvent
 import java.awt.event.MouseEvent
 import com.intellij.openapi.util.text.StringUtil
-import com.intellij.openapi.ui.Messages
 import java.text.SimpleDateFormat
 import java.util.Date
 import javax.swing.JLabel
@@ -35,6 +34,14 @@ import javax.swing.JTree
 import javax.swing.JList
 import javax.swing.JTable
 import com.intellij.ui.treeStructure.treetable.TreeTable
+import java.io.File
+import com.intellij.util.SystemProperties
+import com.intellij.openapi.application.ApplicationNamesInfo
+import com.intellij.notification.Notifications
+import com.intellij.notification.Notification
+import com.intellij.notification.NotificationType
+import com.intellij.ide.actions.ShowFilePathAction
+import javax.swing.event.HyperlinkEvent
 
 /**
  * @author nik
@@ -58,7 +65,16 @@ public class ActionTrackingService(private val project: Project) {
             val records = tracker.exportRecords()
             Disposer.dispose(tracker)
             activeTracker = null
-            Messages.showInfoMessage(project, records, "Actions Log")
+            val productPrefix = ApplicationNamesInfo.getInstance().getFullProductName().replace(' ', '_')
+            val time = tracker.getStartTrackingTime().replaceAll("[\\.,: ]", "_")
+            val file = File(SystemProperties.getUserHome(), "${productPrefix}_action_tracker_$time.txt")
+            file.writeText(records)
+            val message = "Actions log saved to <a href=\"file\">${file.getAbsolutePath()}</a>"
+            Notifications.Bus.notify(Notification("Action Tracker", "Action Tracker", message, NotificationType.INFORMATION) { n, e ->
+                if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+                    ShowFilePathAction.openFile(file)
+                }
+            })
         }
     }
 }
@@ -150,7 +166,7 @@ class ActionTracker(private val project: Project): Disposable {
 
     private fun addRecord(actionData: ActionData) {
         actionRecords.add(ActionRecord(System.currentTimeMillis(), actionData))
-        println(actionData.toPresentableText())
+//        println(actionData.toPresentableText())
     }
 
     fun start() {
@@ -239,12 +255,16 @@ class ActionTracker(private val project: Project): Disposable {
     }
 
     public fun exportRecords(): String {
-        val lines = arrayListOf("Tracking started: ${SimpleDateFormat("dd.MM.yyyy, HH:mm").format(Date(startTime))}.")
+        val lines = arrayListOf("Tracking started: ${getStartTrackingTime()}.")
         val formatter = SimpleDateFormat("HH:mm:ss.SSS")
         actionRecords.mapTo(lines) {
             val time = formatter.format(Date(it.timestamp))
             "$time: ${it.action.toPresentableText()}"
         }
         return lines.joinToString("\n")
+    }
+
+    public fun getStartTrackingTime(): String {
+        return SimpleDateFormat("dd.MM.yyyy, HH:mm").format(Date(startTime))
     }
 }

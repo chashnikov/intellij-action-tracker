@@ -21,7 +21,8 @@ import java.awt.AWTEvent
 import java.awt.event.MouseEvent
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.ui.Messages
-import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.Date
 
 /**
  * @author nik
@@ -130,9 +131,12 @@ class ActionTracker(private val project: Project): Disposable {
     }
 
     public fun exportRecords(): String {
-        return actionRecords.map {
-            val time = java.lang.String.format(Locale.US, "%.1f", (it.timestamp - startTime).toDouble() / 1000)
-            "$time sec: ${it.action.toPresentableText()}"
-        }.joinToString("\n")
+        val lines = arrayListOf("Tracking started: ${SimpleDateFormat("dd.MM.yyyy, HH:mm").format(Date(startTime))}.")
+        val formatter = SimpleDateFormat("HH:mm:ss.SSS")
+        actionRecords.mapTo(lines) {
+            val time = formatter.format(Date(it.timestamp))
+            "$time: ${it.action.toPresentableText()}"
+        }
+        return lines.joinToString("\n")
     }
 }

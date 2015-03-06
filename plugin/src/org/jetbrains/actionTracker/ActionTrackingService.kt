@@ -29,7 +29,6 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.navigation.NavigationItem
 import javax.swing.text.JTextComponent
 import com.intellij.ide.util.gotoByName.ChooseByNamePopup
-import java.awt.Component
 import javax.swing.JTree
 import javax.swing.JList
 import javax.swing.JTable
@@ -42,6 +41,12 @@ import com.intellij.notification.Notification
 import com.intellij.notification.NotificationType
 import com.intellij.ide.actions.ShowFilePathAction
 import javax.swing.event.HyperlinkEvent
+import com.intellij.openapi.actionSystem.PlatformDataKeys
+import java.awt.Component
+import com.intellij.openapi.ui.popup.JBPopup
+import com.intellij.ui.components.JBList
+import java.util.HashMap
+import com.intellij.ui.SearchTextField
 
 /**
  * @author nik
@@ -80,24 +85,26 @@ public class ActionTrackingService(private val project: Project) {
 }
 
 private val actionTextByClass = mapOf("com.intellij.openapi.ui.impl.DialogWrapperPeerImpl\$AnCancelAction" to "Cancel")
-private val contextSensitiveActions = setOf(
-        "EditorEnter", "EditorDelete", "EditorBackSpace",
-        "EditorLeft", "EditorRight", "EditorDown", "EditorUp",
-        "EditorLineStart", "EditorLineEnd", "EditorPageUp", "EditorPageDown",
-        "EditorPreviousWord", "EditorNextWord",
-        "EditorScrollUp", "EditorScrollDown",
-        "EditorTextStart", "EditorTextEnd",
-        "EditorDownWithSelection", "EditorUpWithSelection",
-        "EditorRightWithSelection", "EditorLeftWithSelection",
-        "EditorLineStartWithSelection", "EditorLineEndWithSelection",
-        "EditorPageDownWithSelection", "EditorPageUpWithSelection")
 private val contextSensitiveEvents = setOf(KeyEvent.VK_UP, KeyEvent.VK_DOWN, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
-        KeyEvent.VK_HOME, KeyEvent.VK_END, KeyEvent.VK_PAGE_DOWN, KeyEvent.VK_PAGE_UP, KeyEvent.VK_ENTER, KeyEvent.VK_DELETE, KeyEvent.VK_BACK_SPACE)
+        KeyEvent.VK_HOME, KeyEvent.VK_END, KeyEvent.VK_PAGE_DOWN, KeyEvent.VK_PAGE_UP, KeyEvent.VK_ENTER, KeyEvent.VK_DELETE, KeyEvent.VK_BACK_SPACE, KeyEvent.VK_TAB)
+private val textEditingEvents = setOf(KeyEvent.VK_DELETE, KeyEvent.VK_BACK_SPACE)
 
 private fun isContextSensitiveAction(e: KeyEvent) = e.getKeyCode() in contextSensitiveEvents
 
-private fun getSelectedItem(component: Component, project: Project): String? {
+private inline fun <reified T: Any> Any.getFieldOfType(): T? {
+    val type = javaClass<T>()
+    val field = javaClass.getDeclaredFields().first { type.isAssignableFrom(it.getType()) }
+    field.setAccessible(true)
+    return field?.get(this) as? T
+}
+
+private fun getSelectedItem(component: Component?, project: Project, textEditing: Boolean): String? {
     val context = DataManager.getInstance().getDataContext(component)
+    val text = PlatformDataKeys.PREDEFINED_TEXT.getData(context)
+    if (text != null && textEditing) {
+        return text
+    }
+
     val navigatable = CommonDataKeys.NAVIGATABLE.getData(context)
     if (navigatable is NavigationItem) {
         val presentableText = navigatable.getPresentation()?.getPresentableText()
@@ -106,10 +113,26 @@ private fun getSelectedItem(component: Component, project: Project): String? {
     }
     val popup = project.getUserData(ChooseByNamePopup.CHOOSE_BY_NAME_POPUP_IN_PROJECT_KEY)
     if (popup != null) {
+        if (textEditing) return popup.getEnteredText()
         val element = popup.getChosenElement()
-        val name = popup.getModel().getElementName(element)
-        if (name != null) {
-            return name
+        if (element != null) {
+            val name = popup.getModel().getElementName(element)
+            if (name != null) {
+                return name
+            }
+        }
+    }
+    val searchEverywhere = ActionManager.getInstance().getAction("SearchEverywhere")
+    if (searchEverywhere != null && searchEverywhere.getFieldOfType<JBPopup>()?.isVisible() ?: false) {
+        if (textEditing) {
+            val searchTextField = searchEverywhere.getFieldOfType<SearchTextField>()
+            if (searchTextField != null) {
+                return searchTextField.getText()
+            }
+        }
+        val list = searchEverywhere.getFieldOfType<JBList>()
+        if (list != null) {
+            return list.getSelectedValue()?.toString()
         }
     }
 
@@ -130,7 +153,7 @@ private fun getSelectedItem(component: Component, project: Project): String? {
                 return (0..cur.getColumnCount()-1).map { (cur.getValueAt(row, it) as Any?).toString() }.joinToString(", ")
             }
         }
-        val next = current.getParent()
+        val next = cur.getParent()
         if (next == null) {
             return null
         }
@@ -154,6 +177,7 @@ fun getLocalActionText(action: AnAction): String? {
 
 class ActionTracker(private val project: Project): Disposable {
     private val actionInputEvents = HashSet<InputEvent>()
+    private val actionContexts = HashMap<InputEvent, String>()
     private val actionRecords = ArrayList<ActionRecord>()
     private val startTime = System.currentTimeMillis()
 
@@ -173,6 +197,7 @@ class ActionTracker(private val project: Project): Disposable {
         ActionManager.getInstance().addAnActionListener(object : AnActionListener.Adapter() {
             public override fun beforeActionPerformed(action: AnAction, dataContext: DataContext, event: AnActionEvent) {
                 val input = event.getInputEvent()
+                if (actionInputEvents.size() > 100) actionInputEvents.clear()
                 actionInputEvents.add(input)
                 val source = when (input) {
                     is MouseEvent -> MouseClicked(input)
@@ -185,18 +210,24 @@ class ActionTracker(private val project: Project): Disposable {
                 val actionClassName = action.javaClass.getName()
                 val text = StringUtil.nullize(event.getPresentation().getText(), true)
                         ?: actionId ?: getLocalActionText(action) ?: actionTextByClass[actionClassName] ?: actionClassName
-                val actionInvoked = ActionInvoked(text, source)
-                if (actionId in contextSensitiveActions) {
-                    val component = input?.getComponent()
-                    if (component != null) {
-                        val selection = getSelectedItem(component, project)
-                        if (selection != null) {
-                            addRecord(ContextSensitiveActionInvoked(selection, actionInvoked))
-                            return
-                        }
-                    }
+                addRecord(ActionInvoked(text, source), input)
+            }
+        }, this)
+        IdeEventQueue.getInstance().addDispatcher(object : EventDispatcher {
+            public override fun dispatch(e: AWTEvent?): Boolean {
+                val selection = if (e is MouseEvent && e.getID() == MouseEvent.MOUSE_CLICKED) {
+                    getSelectedItem(e.getComponent(), project, false)
                 }
-                addRecord(actionInvoked)
+                else if (e is KeyEvent && e.getID() == KeyEvent.KEY_PRESSED && isContextSensitiveAction(e)) {
+                    getSelectedItem(e.getComponent(), project, e.getKeyCode() in textEditingEvents)
+                }
+                else null
+
+                if (selection != null && e is InputEvent) {
+                    if (actionContexts.size() > 100) actionContexts.clear()
+                    actionContexts.put(e, selection)
+                }
+                return false
             }
         }, this)
         IdeEventQueue.getInstance().addPostprocessor(object : EventDispatcher {
@@ -213,12 +244,22 @@ class ActionTracker(private val project: Project): Disposable {
 
     }
 
+    private fun addRecord(actionData: ActionData, input: InputEvent?) {
+        val selection = actionContexts[input]
+        if (selection != null) {
+            actionContexts.remove(input)
+            addRecord(ContextSensitiveActionInvoked(selection, actionData))
+        } else {
+            addRecord(actionData)
+        }
+    }
+
     private fun processMouseClickedEvent(e: MouseEvent) {
         if (actionInputEvents.contains(e)) {
             actionInputEvents.remove(e)
             return
         }
-        addRecord(MouseClicked(e))
+        addRecord(MouseClicked(e), e)
     }
 
     private fun processKeyPressedEvent(e: KeyEvent) {
@@ -242,15 +283,7 @@ class ActionTracker(private val project: Project): Disposable {
             addRecord(CharTyped(e.getKeyChar()))
         }
         else {
-            val action = KeyStrokePressed(KeyStroke.getKeyStrokeForEvent(e))
-            if (isContextSensitiveAction(e)) {
-                val selection = getSelectedItem(e.getComponent(), project)
-                if (selection != null) {
-                    addRecord(ContextSensitiveActionInvoked(selection, action))
-                    return
-                }
-            }
-            addRecord(action)
+            addRecord(KeyStrokePressed(KeyStroke.getKeyStrokeForEvent(e)), e)
         }
     }
 

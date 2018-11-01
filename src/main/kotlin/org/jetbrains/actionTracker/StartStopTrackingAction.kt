@@ -1,14 +1,14 @@
 package org.jetbrains.actionTracker
 
-import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAwareAction
 
 /**
  * @author nik
  */
-public class StartStopTrackingAction : DumbAwareAction("Start/Stop Tracking") {
+class StartStopTrackingAction : DumbAwareAction("Start/Stop Tracking") {
     override fun actionPerformed(e: AnActionEvent) {
-        val service = e.getProject().getActionTrackingService()
+        val service = e.project!!.getActionTrackingService()
         if (service.activeTracker != null) {
             service.stopTracking()
         }
@@ -18,14 +18,14 @@ public class StartStopTrackingAction : DumbAwareAction("Start/Stop Tracking") {
     }
 
     override fun update(e: AnActionEvent) {
-        val project = e.getProject()
-        val presentation = e.getPresentation()
+        val project = e.project
+        val presentation = e.presentation
         if (project == null) {
-            presentation.setEnabledAndVisible(false)
+            presentation.isEnabledAndVisible = false
             return
         }
         val tracker = project.getActionTrackingService().activeTracker
-        presentation.setEnabledAndVisible(true)
-        presentation.setText(if (tracker == null) "Start Tracking" else "Stop Tracking...")
+        presentation.isEnabledAndVisible = true
+        presentation.text = if (tracker == null) "Start Tracking" else "Stop Tracking..."
     }
 }

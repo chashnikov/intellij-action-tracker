@@ -1,7 +1,6 @@
-<idea-plugin version="2">
+<idea-plugin>
   <id>org.jetbrains.action-tracker</id>
   <name>Action Tracker</name>
-  <version>0.3</version>
   <vendor url="http://www.jetbrains.com">JetBrains</vendor>
 
   <description><![CDATA[
@@ -9,7 +8,7 @@
       and Tools | 'Stop Tracking...' to show the recorded data.
     ]]></description>
 
-  <idea-version since-build="135.0"/>
+  <idea-version since-build="182.0"/>
 
   <depends>com.intellij.modules.lang</depends>
 

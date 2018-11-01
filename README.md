@@ -1,1 +1,1 @@
-Plugin for IntelliJ IDEA to record user actions
+This repository won't be updated anymore. The sources are moved to an internal JetBrains repository. 
